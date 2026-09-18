@@ -1,4 +1,4 @@
-name: Deploy Scribix
+name: Deploy Application
 
 on:
   workflow_dispatch:
@@ -8,9 +8,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Get project source code
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -18,36 +20,47 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
+      # 3. Install backend dependencies
       - name: Install dependencies
         working-directory: backend
         run: npm ci
 
+      # 4. Build backend
       - name: Build backend
         working-directory: backend
         run: npm run build
 
+      # 5. Setup SSH using GitHub Secret
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
 
-      - name: Add VPS to known hosts
+      # 6. Test SSH connection
+      - name: Test SSH connection
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "whoami && pwd"
 
+      # 7. Upload build to VPS using SCP
       - name: Upload build with SCP
         run: |
-          scp -r backend/dist ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/${{ secrets.VPS_USER }}/Scribix/backend/
+          scp -o StrictHostKeyChecking=no -r \
+            backend/dist \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/${{ secrets.VPS_USER }}/Scribix/backend/
 
-      - name: Restart application on VPS
+      # 8. Restart application on VPS
+      - name: Restart application
         run: |
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             cd ~/Scribix/backend
             pm2 restart scribix
             pm2 save
           EOF
 
+      # 9. Verify deployment
       - name: Verify deployment
         run: |
           sleep 5
