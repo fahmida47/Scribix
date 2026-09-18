@@ -30,27 +30,42 @@ jobs:
         working-directory: backend
         run: npm run build
 
-      # 5. Setup SSH
+      # 5. Setup SSH agent
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
 
-      # 6. Test SSH connection
+      # 6. Check GitHub Secrets
+      - name: Check VPS configuration
+        run: |
+          echo "VPS_USER is set: ${{ secrets.VPS_USER != '' }}"
+          echo "VPS_HOST is set: ${{ secrets.VPS_HOST != '' }}"
+          echo "SSH key is set: ${{ secrets.VPS_SSH_KEY != '' }}"
+
+      # 7. Test SSH connection
       - name: Test SSH connection
-        run: ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "whoami && pwd"
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "whoami && pwd"
 
-      # 7. Upload build to VPS using SCP
+      # 8. Upload build using SCP
       - name: Upload build with SCP
-        run: scp -o StrictHostKeyChecking=no -r backend/dist ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/${{ secrets.VPS_USER }}/Scribix/backend/
+        run: |
+          scp -o StrictHostKeyChecking=no -r \
+            backend/dist \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/${{ secrets.VPS_USER }}/Scribix/backend/"
 
-      # 8. Restart application on VPS
+      # 9. Restart application
       - name: Restart application
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "cd ~/Scribix/backend && pm2 restart scribix && pm2 save"
+          ssh -o StrictHostKeyChecking=no \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "cd ~/Scribix/backend && pm2 restart scribix && pm2 save"
 
-      # 9. Verify deployment
+      # 10. Verify deployment
       - name: Verify deployment
         run: |
           sleep 5
-          curl -f http://${{ secrets.VPS_HOST }}/api/health
+          curl -f "http://${{ secrets.VPS_HOST }}/api/health"
